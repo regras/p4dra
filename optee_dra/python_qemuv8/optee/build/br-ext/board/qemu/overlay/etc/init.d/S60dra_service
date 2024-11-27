@@ -1,0 +1,3 @@
+#!/bin/sh
+
+dra_service eth0 > /tmp/dra_service.log 2> /tmp/dra_service.log&
