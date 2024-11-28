@@ -158,20 +158,21 @@ int main(int argc, char *argv[]) {
 
     for (int id = 0; id < quantidade_provas; id++) {
         // Invertendo Endianess
-        swapEndian(dados[id].id_dispositivo, ID_DISPOSITIVO_LEN);
-        swapEndian(dados[id].prova, PROVA_LEN);
+        swapEndian(dados[id%20000].id_dispositivo, ID_DISPOSITIVO_LEN);
+        swapEndian(dados[id%20000].prova, PROVA_LEN);
 
         // Passa os valores para Bytes
-        if (hexstring_to_byte_array(custom_hdr.id_dispositivo, dados[id].id_dispositivo, ID_DISPOSITIVO_LEN) != 0 ||
-            hexstring_to_byte_array(custom_hdr.prova, dados[id].prova, PROVA_LEN) != 0) {
-            fprintf(stderr, "Erro ao converter valores hexadecimais: %64s", dados[id].id_dispositivo);
+        if (hexstring_to_byte_array(custom_hdr.id_dispositivo, dados[id%20000].id_dispositivo, ID_DISPOSITIVO_LEN) != 0 ||
+            hexstring_to_byte_array(custom_hdr.prova, dados[id%20000].prova, PROVA_LEN) != 0) {
+            fprintf(stderr, "Erro ao converter valores hexadecimais: %64s", dados[id%20000].id_dispositivo);
             id = id+1;
             continue;
         }
 
         // Calculando SRC MAC
         src_mac[5] = ((id+1)%256);
-        src_mac[4] = (id / 256);
+        src_mac[4] = ((id/256)%256);
+        src_mac[3] = (id/65536);
 
         // Cria o pacote
         create_custom_packet(packet, dest_mac, src_mac, &custom_hdr);

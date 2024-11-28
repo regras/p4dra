@@ -32,9 +32,12 @@ char *iface;
 uint32_t contador_pacotes = 0;
 uint32_t total_pacotes = 1000;
 pcap_t *handle;
-double time1, time2, timedif, timesum = 0;
-double time_arquivo1, time_arquivo2, time_arquivodif, time_arquivosum = 0;
-double time_calculo1, time_calculo2, time_calculodif, time_calculosum = 0;
+int sockfd;
+struct sockaddr_ll sa;
+
+long long time1, time2, timedif = 0; 
+long long time_arquivo1, time_arquivo2, time_arquivodif, time_arquivosum = 0;
+long long time_calculo1, time_calculo2, time_calculodif, time_calculosum = 0;
 struct timespec ts;
 
 // Estrutura para carregar arquivo de ids/chaves/provas na memoria
@@ -146,9 +149,7 @@ void cria_pacote_verificacao(uint8_t *packet, const uint8_t *dest_mac, const uin
 }
 
 uint8_t envia_pacote_verificacao(uint8_t *dest_mac, uint8_t *src_mac, char *id_rodada_hex, char *id_dispositivo_hex, char *prova_hex, char *verificacao_hex) {
-    int sockfd;
     uint8_t packet[sizeof(struct ether_header) + sizeof(struct p4dra_oper_h) + sizeof(struct p4dra_verificacao_h)];
-    struct sockaddr_ll sa;
     struct p4dra_oper_h *oper_hdr = (struct p4dra_oper_h *)(packet + sizeof(struct ether_header));
     struct p4dra_verificacao_h *verif_hdr = (struct p4dra_verificacao_h *)(packet + sizeof(struct ether_header) + sizeof(struct p4dra_oper_h));
 
@@ -169,19 +170,7 @@ uint8_t envia_pacote_verificacao(uint8_t *dest_mac, uint8_t *src_mac, char *id_r
     hexstring_to_byte_array(verif_hdr->prova, prova_hex, PROVA_LEN);
     hexstring_to_byte_array(verif_hdr->verificacao, verificacao_hex, PROVA_LEN);
 
-    // Cria o socket raw
-    sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETHERTYPE_CUSTOM));
-    if (sockfd < 0) {
-        perror("Erro ao criar o socket");
-        exit(1);
-    }
-
-    // Configura a estrutura sockaddr_ll para enviar pela interface de rede
-    memset(&sa, 0, sizeof(struct sockaddr_ll));
-    sa.sll_family = AF_PACKET;
-    sa.sll_protocol = htons(ETHERTYPE_CUSTOM);
-    sa.sll_ifindex = if_nametoindex(iface);  // Substitua "eth0" pela interface de rede desejada
-    sa.sll_halen = 6;
+    // Coloca o MAC de destino no Socket
     memcpy(sa.sll_addr, dest_mac, 6);
 
     // Cria o pacote, invertendo smac e dmac
@@ -194,10 +183,7 @@ uint8_t envia_pacote_verificacao(uint8_t *dest_mac, uint8_t *src_mac, char *id_r
         exit(1);
     }
 
-    // Fecha o socket
-    close(sockfd);
-
-    /* clock_gettime(CLOCK_REALTIME, &ts);
+    /* clock_gettime(CLOCK_MONOTONIC, &ts);
     long long microssegundos = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
     printf("%lld;", microssegundos);
     for (int i = 0; i < 6; i++) {
@@ -248,8 +234,8 @@ int buscarPorIdMemoria(const char *id_procurado, char *chave, char *prova) {
 }
 
 int buscarPorIdDireto(uint32_t id, char *chave, char *prova) {
-    memcpy(chave, dados[id].chave, CHAVE_LEN);
-    memcpy(prova, dados[id].prova, PROVA_LEN);
+    memcpy(chave, dados[id%20000].chave, CHAVE_LEN);
+    memcpy(prova, dados[id%20000].prova, PROVA_LEN);
     return 0; // Sucesso
 }
 
@@ -309,7 +295,8 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 
         // Começar a contar se for o primeiro pacote de resposta
         if (contador_pacotes == 0 && oper_hdr->oper == 0x2) {
-            time1 = (double) clock();
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            time1 = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
         }
 
         // Se for resposta, calcula verificacao
@@ -319,7 +306,7 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
             char *id_dispositivo_hex = byte_array_to_hexstring(reply_hdr->id_dispositivo, ID_DISPOSITIVO_LEN_BYTES);
             char *prova_hex = byte_array_to_hexstring(reply_hdr->prova, PROVA_LEN_BYTES);
 
-            /* clock_gettime(CLOCK_REALTIME, &ts);
+            /* clock_gettime(CLOCK_MONOTONIC, &ts);
             long long microssegundos = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
             printf("%lld;", microssegundos);
             for (int i = 0; i < 6; i++) {
@@ -358,17 +345,21 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
             char chave_hex[CHAVE_LEN];
             char verificacao_hex[PROVA_LEN];
 
-            time_arquivo1 = (double)clock();
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            time_arquivo1 = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
             if (buscarPorIdDireto(contador_pacotes, chave_hex, verificacao_hex) == 0) {
-                time_arquivo2 = (double)clock();
-                time_arquivodif = ((double) time_arquivo2 - time_arquivo1) / CLOCKS_PER_SEC;
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                time_arquivo2 = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
+                time_arquivodif = (time_arquivo2 - time_arquivo1);
                 time_arquivosum += time_arquivodif;
+                // printf("a;%i;%lld\n", contador_pacotes, time_arquivosum);
                 // Constrói o comando para chamar o outro programa
                 char comando[512];
-                snprintf(comando, sizeof(comando), "./forro-args-dra2 %.*s %.*s %.*s %.*s 0", CHAVE_LEN, chave_hex, NONCE_LEN, param2_hex, NONCE_LEN, param1_hex, ID_DISPOSITIVO_LEN, id_dispositivo_hex);
+                snprintf(comando, sizeof(comando), "forro-args-dra2 %.*s %.*s %.*s %.*s 0", CHAVE_LEN, chave_hex, NONCE_LEN, param2_hex, NONCE_LEN, param1_hex, ID_DISPOSITIVO_LEN, id_dispositivo_hex);
                 // printf("Executando comando: %s\n", comando);
 
-                time_calculo1 = (double)clock();
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                time_calculo1 = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
                 FILE *processo = popen(comando, "r");
                 if (processo == NULL) {
                     perror("Erro ao executar o comando");
@@ -380,9 +371,12 @@ void packet_handler(u_char *user, const struct pcap_pkthdr *pkthdr, const u_char
 
                 getline(&verificacao_hex, &len, processo);
                 pclose(processo);
-                time_calculo2 = (double)clock();
-                time_calculodif = ((double) time_calculo2 - time_calculo1) / CLOCKS_PER_SEC;
+
+                clock_gettime(CLOCK_MONOTONIC, &ts);
+                time_calculo2 = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
+                time_calculodif = (time_calculo2 - time_calculo1);
                 time_calculosum += time_calculodif;
+                // printf("c;%i;%lld\n", contador_pacotes, time_calculosum);
 
                 envia_pacote_verificacao(eth_header->ether_dhost, eth_header->ether_shost, id_rodada_hex, id_dispositivo_hex, prova_hex, verificacao_hex);
             } else {
@@ -410,9 +404,9 @@ int main(int argc, char *argv[]) {
         total_pacotes = (uint32_t)strtoul(argv[3], NULL, 10);
     }
 
-    printf("carregando na memoria... \n");
+    // printf("carregando na memoria... \n");
     carregarArquivoMemoria(arquivo_provas);
-    printf("carregado!\n");
+    // printf("carregado!\n");
 
     char error_buffer[PCAP_ERRBUF_SIZE];
     struct bpf_program filter;
@@ -427,7 +421,7 @@ int main(int argc, char *argv[]) {
         return 2;
     }
 
-    //Ajustando buffer para 200MB e SNAP LEN para 105B para otimizar a captura e nao perder pacotes
+    //Ajustando buffer para 200MB e SNAP LEN para 176B para otimizar a captura e nao perder pacotes
     pcap_set_buffer_size(handle, 200 * 1024 * 1024);
     pcap_set_snaplen(handle, SNAP_LEN);
     pcap_set_immediate_mode(handle, 1);
@@ -452,15 +446,33 @@ int main(int argc, char *argv[]) {
         return 2;
     }
 
+    // Cria o socket raw
+    sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETHERTYPE_CUSTOM));
+    if (sockfd < 0) {
+        perror("Erro ao criar o socket");
+        exit(1);
+    }
+
+    // Configura a estrutura sockaddr_ll para enviar verificacoes pela interface de rede
+    memset(&sa, 0, sizeof(struct sockaddr_ll));
+    sa.sll_family = AF_PACKET;
+    sa.sll_protocol = htons(ETHERTYPE_CUSTOM);
+    sa.sll_ifindex = if_nametoindex(iface);
+    sa.sll_halen = 6;
+
     // Captura de pacotes
     pcap_loop(handle, 0, packet_handler, NULL);
 
-    time2 = (double) clock();
-    timedif = ((double) time2 - time1) / CLOCKS_PER_SEC;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    time2 = ts.tv_sec * 1000000LL + ts.tv_nsec / 1000;
+    timedif = (time2 - time1);
     // printf("tempo total para processar %i pacotes: %f segundos\n", total_pacotes, timedif);
     // printf("tempo para buscar %i IDs: %f segundos\n", total_pacotes, time_arquivosum);
     // printf("tempo para calcular %i verificacoes: %f segundos\n", total_pacotes, time_calculosum);
-    printf("%i;%f;%f;%f\n", total_pacotes, timedif, time_arquivosum, time_calculosum);
+    printf("%i;%lld;%lld;%lld\n", total_pacotes, timedif, time_arquivosum, time_calculosum);
+
+    // Fecha o socket
+    close(sockfd);
 
     // Libere o filtro e feche o handle
     pcap_freecode(&filter);
