@@ -1,0 +1,12 @@
+#ignoring python cache files from Utils
+*.pyc
+
+#ignoring build-only directories
+/*/*/__pycache__/
+/TNA/__pycache__/
+/tools/data/*
+/tools/build/
+TNA/zlog-cfg-cur
+TNA/bf_drivers.log
+
+TNA/bfrt_python/id_chave_prova*
