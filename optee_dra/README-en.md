@@ -1,7 +1,3 @@
-# English version
-
-There's an english version of this README [available here](README-en.md)
-
 # optee_dra
 OPTEE application for the DRA protocol
 

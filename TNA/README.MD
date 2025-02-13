@@ -1,3 +1,7 @@
+# English version
+
+There's an english version of this README [available here](README-en.md)
+
 # Configurando a quantidade de dispositivos que podem ser atestados:
 
 Para alterar a quantidade de dispositivos, alterar estes 2 arquivos:
