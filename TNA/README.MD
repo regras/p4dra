@@ -1,6 +1,6 @@
 # English version
 
-There's an english version of this README [available here](README-en.md)
+There's an english version of this README [available here](README-en.MD)
 
 # Configurando a quantidade de dispositivos que podem ser atestados:
 
