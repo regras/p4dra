@@ -1,5 +1,7 @@
 # P4DRA: Distributed remote attestation for data centers based on SDN and P4
 
+There's an english version of this README [available here](README-en.md)
+
 ## A implementação
 
 Implementação de um protocolo para realização de atestação remota de equipamentos no contexto de data centers utilizando dispositivos de rede programáveis, baseado na arquitetura TNA (*Tofino Native Architecture*).
